@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Profile – Bennett University</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="profile.css" />
+</head>
+<body class="profile-page">
+  <div id="root"></div>
+
+  <!-- React and Babel via CDN so this single HTML file becomes a React page -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const API_PORT = '3000';
+
+    function getApiUrl(path) {
+      const port = window.location.port;
+      const isFile = window.location.protocol === 'file:';
+      const needRemote = isFile || !port || port !== API_PORT || !window.location.hostname;
+      const base = needRemote ? 'http://localhost:' + API_PORT : '';
+      return (base + '/api' + path).replace(/([^:]\/)\/+/g, '$1');
+    }
+
+    function getToken() {
+      return localStorage.getItem('auth_token');
+    }
+
+    function clearAuth() {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.location.href = 'login.html';
+    }
+
+    function authHeaders() {
+      const token = getToken();
+      return {
+        'Content-Type': 'application/json',
+        Authorization: token ? 'Bearer ' + token : '',
+      };
+    }
+
+    function ProfilePage() {
+      const [email, setEmail] = useState('');
+      const [about, setAbout] = useState('');
+      const [fullName, setFullName] = useState('');
+      const [benchpress, setBenchpress] = useState('');
+      const [dumbbell, setDumbbell] = useState('');
+      const [progressNotes, setProgressNotes] = useState('');
+      const [myTimeslot, setMyTimeslot] = useState('');
+      const [allTimeslots, setAllTimeslots] = useState('');
+      const [leaderboardPosition, setLeaderboardPosition] = useState('');
+      const [avatar, setAvatar] = useState('');
+      const [pendingAvatar, setPendingAvatar] = useState(null);
+      const [status, setStatus] = useState('');
+      const [statusType, setStatusType] = useState('');
+      const [loading, setLoading] = useState(true);
+
+      // Redirect if not logged in
+      useEffect(() => {
+        if (!getToken()) {
+          clearAuth();
+        }
+      }, []);
+
+      // Load profile data
+      useEffect(() => {
+        async function loadProfile() {
+          try {
+            const res = await fetch(getApiUrl('/profile'), { headers: authHeaders() });
+            if (res.status === 401) {
+              clearAuth();
+              return;
+            }
+            const data = await res.json();
+            if (!data.success) {
+              setLoading(false);
+              return;
+            }
+            const user = data.user || {};
+            const profile = data.profile || {};
+
+            if (user.email) setEmail(user.email);
+            if (profile.about) setAbout(profile.about);
+            if (profile.full_name) setFullName(profile.full_name);
+            if (profile.benchpress_pr) setBenchpress(profile.benchpress_pr);
+            if (profile.dumbbell_pr) setDumbbell(profile.dumbbell_pr);
+            if (profile.progress_notes) setProgressNotes(profile.progress_notes);
+            if (profile.my_timeslot) setMyTimeslot(profile.my_timeslot);
+
+            if (profile.leaderboard_position != null && profile.leaderboard_position > 0) {
+              setLeaderboardPosition(String(profile.leaderboard_position));
+            }
+
+            if (profile.avatar) {
+              setAvatar(profile.avatar);
+            }
+
+            if (!allTimeslots) {
+              setAllTimeslots('Mon–Fri 6am–10pm (view schedule)');
+            }
+          } catch (err) {
+            console.error(err);
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        loadProfile();
+      }, []);
+
+      function handleAvatarChange(e) {
+        const file = e.target.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result;
+          const img = new Image();
+          img.onload = function () {
+            const canvas = document.createElement('canvas');
+            const size = Math.min(400, img.width, img.height);
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, size, size);
+            const resized = canvas.toDataURL('image/jpeg', 0.8);
+            setAvatar(resized);
+            setPendingAvatar(resized);
+          };
+          img.src = dataUrl;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      async function handleSave() {
+        setStatus('Saving...');
+        setStatusType('');
+
+        const payload = {
+          about,
+          full_name: fullName,
+          benchpress_pr: benchpress,
+          dumbbell_pr: dumbbell,
+          progress_notes: progressNotes,
+          my_timeslot: myTimeslot,
+          leaderboard_position: parseInt(leaderboardPosition, 10) || 0,
+        };
+
+        if (pendingAvatar) {
+          payload.avatar = pendingAvatar;
+        }
+
+        try {
+          const res = await fetch(getApiUrl('/profile'), {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+
+          if (res.status === 401) {
+            clearAuth();
+            return;
+          }
+
+          if (data.success) {
+            setStatus('Saved!');
+            setStatusType('success');
+            setPendingAvatar(null);
+            setTimeout(() => setStatus(''), 2000);
+          } else {
+            setStatus(data.message || 'Failed to save');
+            setStatusType('error');
+          }
+        } catch (err) {
+          console.error(err);
+          setStatus('Network error');
+          setStatusType('error');
+        }
+      }
+
+      const leaderboardDisplay =
+        parseInt(leaderboardPosition, 10) > 0 ? '#' + parseInt(leaderboardPosition, 10) : '—';
+
+      return (
+        <>
+          <header className="profile-header">
+            <div className="profile-header-inner">
+              <a href="index.html" className="profile-logo">
+                BENNETT-UNIVERSITY OFFICIAL
+              </a>
+              <nav className="profile-nav">
+                <a href="index.html">Home</a>
+                <a href="leaderboard.html">Leaderboard</a>
+                <span className="profile-email">{email}</span>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    clearAuth();
+                  }}
+                  id="logout-link"
+                >
+                  Logout
+                </a>
+              </nav>
+            </div>
+          </header>
+
+          <main className="profile-main">
+            <div className="profile-container">
+              {loading && <p>Loading profile...</p>}
+
+              {!loading && (
+                <>
+                  <section className="profile-top animate-in">
+                    <div className="profile-avatar-wrap">
+                      <div className={'profile-avatar' + (avatar ? ' has-image' : '')}>
+                        {avatar ? (
+                          <img src={avatar} alt="Profile" />
+                        ) : (
+                          <span className="avatar-placeholder">+</span>
+                        )}
+                      </div>
+                      <label className="avatar-edit" htmlFor="avatar-input">
+                        edit
+                      </label>
+                      <input
+                        type="file"
+                        id="avatar-input"
+                        accept="image/*"
+                        hidden
+                        onChange={handleAvatarChange}
+                      />
+                    </div>
+                    <div className="profile-about-card">
+                      <h2>about you</h2>
+                      <textarea
+                        value={about}
+                        onChange={(e) => setAbout(e.target.value)}
+                        placeholder="Tell us about yourself, your goals, and what drives you..."
+                      />
+                      <div className="profile-name-row">
+                        <label htmlFor="full-name">Full name</label>
+                        <input
+                          type="text"
+                          id="full-name"
+                          placeholder="Your name"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <div className="profile-divider animate-in" style={{ animationDelay: '0.1s' }}></div>
+
+                  <section className="profile-timeslots animate-in" style={{ animationDelay: '0.15s' }}>
+                    <div className="profile-card">
+                      <h3>My timeslot</h3>
+                      <input
+                        type="text"
+                        id="my-timeslot"
+                        placeholder="e.g. Mon 9am, Wed 2pm"
+                        value={myTimeslot}
+                        onChange={(e) => setMyTimeslot(e.target.value)}
+                      />
+                    </div>
+                    <div className="profile-card">
+                      <h3>All available timeslots</h3>
+                      <input
+                        type="text"
+                        id="all-timeslots"
+                        placeholder="View or select available slots"
+                        readOnly
+                        value={allTimeslots}
+                      />
+                    </div>
+                  </section>
+
+                  <section className="profile-progress animate-in" style={{ animationDelay: '0.2s' }}>
+                    <div className="profile-card profile-card--wide">
+                      <h3>Progress &amp; PRs</h3>
+                      <p className="card-subtitle">Bench press, dumbbell, and more</p>
+                      <div className="progress-grid">
+                        <div className="progress-field">
+                          <label htmlFor="benchpress">Bench press (kg)</label>
+                          <input
+                            type="text"
+                            id="benchpress"
+                            placeholder="e.g. 80"
+                            value={benchpress}
+                            onChange={(e) => setBenchpress(e.target.value)}
+                          />
+                        </div>
+                        <div className="progress-field">
+                          <label htmlFor="dumbbell">Dumbbell (kg)</label>
+                          <input
+                            type="text"
+                            id="dumbbell"
+                            placeholder="e.g. 25"
+                            value={dumbbell}
+                            onChange={(e) => setDumbbell(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="progress-field progress-field--full">
+                        <label htmlFor="progress-notes">Progress notes</label>
+                        <textarea
+                          id="progress-notes"
+                          rows="3"
+                          placeholder="Track your journey, milestones, and goals..."
+                          value={progressNotes}
+                          onChange={(e) => setProgressNotes(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="profile-leaderboard animate-in" style={{ animationDelay: '0.25s' }}>
+                    <div className="profile-card profile-card--accent">
+                      <h3>My position on the leaderboard</h3>
+                      <p className="leaderboard-value" id="leaderboard-position">
+                        {leaderboardDisplay}
+                      </p>
+                      <input
+                        type="number"
+                        id="leaderboard-input"
+                        placeholder="Rank"
+                        min="1"
+                        value={leaderboardPosition}
+                        onChange={(e) => setLeaderboardPosition(e.target.value)}
+                      />
+                    </div>
+                  </section>
+
+                  <div className="profile-actions animate-in" style={{ animationDelay: '0.3s' }}>
+                    <button
+                      type="button"
+                      className="profile-save-btn"
+                      onClick={handleSave}
+                      disabled={loading}
+                    >
+                      Save profile
+                    </button>
+                    <span className={`save-status${statusType ? ' ' + statusType : ''}`}>{status}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </main>
+        </>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<ProfilePage />);
+  </script>
+</body>
+</html>

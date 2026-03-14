@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leaderboard – CampusFit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="auth.css" />
+</head>
+<body class="profile-page">
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const API_PORT = '3000';
+
+    function getApiUrl(path) {
+      const port = window.location.port;
+      const isFile = window.location.protocol === 'file:';
+      const needRemote = isFile || !port || port !== API_PORT || !window.location.hostname;
+      const base = needRemote ? 'http://localhost:' + API_PORT : '';
+      return (base + path).replace(/([^:]\/)\/+/g, '$1');
+    }
+
+    function LeaderboardPage() {
+      const [entries, setEntries] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        async function load() {
+          try {
+            const res = await fetch(getApiUrl('/api/leaderboard-advanced'));
+            if (!res.ok) {
+              throw new Error('Failed to load leaderboard');
+            }
+            const data = await res.json();
+            if (!data.success) {
+              throw new Error(data.message || 'Failed to load leaderboard');
+            }
+            setEntries(data.data || []);
+          } catch (err) {
+            console.error(err);
+            setError('Unable to load leaderboard. Make sure the server and seed script have run.');
+          } finally {
+            setLoading(false);
+          }
+        }
+        load();
+      }, []);
+
+      return (
+        <>
+          <header className="profile-header">
+            <div className="profile-header-inner">
+              <a href="index.html" className="profile-logo">
+                BENNETT-UNIVERSITY OFFICIAL
+              </a>
+              <nav className="profile-nav">
+                <a href="index.html">Home</a>
+                <a href="profile.html">My Profile</a>
+                <a href="leaderboard.html">Leaderboard</a>
+              </nav>
+            </div>
+          </header>
+
+          <main className="profile-main">
+            <div className="profile-container">
+              <section className="profile-progress animate-in" style={{ animationDelay: '0.1s' }}>
+                <div className="profile-card profile-card--wide">
+                  <h1 style={{ marginBottom: '0.25rem' }}>Gym Leaderboard</h1>
+                  <p className="card-subtitle">
+                    Ranking members by strength, consistency, improvement, skills, and competition performance.
+                  </p>
+
+                  {loading && <p style={{ marginTop: '1.5rem' }}>Loading leaderboard...</p>}
+                  {error && (
+                    <p style={{ marginTop: '1.5rem', color: '#ff4d4f' }}>
+                      {error}
+                    </p>
+                  )}
+
+                  {!loading && !error && (
+                    <div style={{ marginTop: '1.5rem', overflowX: 'auto' }}>
+                      <table className="leaderboard-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Name</th>
+                            <th>Level</th>
+                            <th>Strength</th>
+                            <th>Consistency</th>
+                            <th>Improvement</th>
+                            <th>Skill</th>
+                            <th>Comp pts</th>
+                            <th>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entries.slice(0, 20).map((row, idx) => {
+                            const rank = idx + 1;
+                            let rankClass = '';
+                            if (rank === 1) rankClass = 'leaderboard-rank--gold';
+                            else if (rank === 2) rankClass = 'leaderboard-rank--silver';
+                            else if (rank === 3) rankClass = 'leaderboard-rank--bronze';
+
+                            const level = (row.experience_level || '').toLowerCase();
+                            let levelClass = '';
+                            if (level === 'beginner') levelClass = 'badge-level--beginner';
+                            else if (level === 'intermediate') levelClass = 'badge-level--intermediate';
+                            else if (level === 'advanced') levelClass = 'badge-level--advanced';
+
+                            return (
+                              <tr key={row.user_id}>
+                                <td className={`leaderboard-rank ${rankClass}`}>{rank}</td>
+                                <td className="leaderboard-name">{row.name}</td>
+                                <td>
+                                  <span className={`badge-level ${levelClass}`}>
+                                    {row.experience_level}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="metric-pill">
+                                    {row.strength_score?.toFixed(1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="metric-pill">
+                                    {row.consistency_score?.toFixed(1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="metric-pill">
+                                    {row.improvement_score?.toFixed(1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="metric-pill">
+                                    {row.skill_score?.toFixed(1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="metric-pill">
+                                    {row.competition_points?.toFixed(1)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="metric-pill metric-pill--total">
+                                    {row.total_score?.toFixed(1)}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <p style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: '#8c8c8e' }}>
+                        Showing top 20 out of {entries.length} seeded members.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          </main>
+        </>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<LeaderboardPage />);
+  </script>
+</body>
+</html>
+
