@@ -1,6 +1,6 @@
 # Bennett University
 **What the website does:**
-1) it calculates yoyr gym PR and ranks you accordingly 
+1) it calculates your gym PR and ranks you accordingly 
 2) it gives you a proper time slot to reduce the chaios
 3) it gives you the choice to share your thoughts which everyone can see
 
