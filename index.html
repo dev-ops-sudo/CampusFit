@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CampusFit</title>
+  <title>CampusFit |  Training Club</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <link rel="stylesheet" href="styles.css" />
@@ -15,7 +15,6 @@
 <body>
   <div id="root"></div>
 
-  <!-- React + ReactDOM + Babel for this single-page React experience -->
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -24,6 +23,35 @@
     const { useState, useEffect } = React;
 
     const API_PORT = '3000';
+
+    const heroSlides = [
+      'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1800&q=80',
+      'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1800&q=80',
+      'https://images.unsplash.com/photo-1593079831268-3381b0db4a77?auto=format&fit=crop&w=1800&q=80',
+    ];
+
+    const showcaseImages = [
+      {
+        src: 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=1200&q=80',
+        title: 'Strength Floor',
+        subtitle: 'Premium free weights and racks',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1200&q=80',
+        title: 'Functional Arena',
+        subtitle: 'Mobility and HIIT-focused training zone',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?auto=format&fit=crop&w=1200&q=80',
+        title: 'Recovery Lounge',
+        subtitle: 'Stretch, recover, and reset faster',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1434682881908-b43d0467b798?auto=format&fit=crop&w=1200&q=80',
+        title: 'Cardio Studio',
+        subtitle: 'High-energy endurance sessions',
+      },
+    ];
 
     function getApiUrl(path) {
       const port = window.location.port;
@@ -61,66 +89,65 @@
       }, []);
 
       return (
-        <div className="mini-leaderboard-card">
-          <div className="mini-leaderboard-header">
-            <div>
-              <div className="mini-leaderboard-title">Social</div>
-              <h3 style={{ margin: '0.25rem 0 0', fontFamily: 'Syne, sans-serif' }}>Leaderboard</h3>
-            </div>
-            {!loading && !error && entries.length > 0 && (
-              <div className="mini-leaderboard-subtitle">
-                Live top {entries.length} gymrats
-              </div>
-            )}
+        <div className="leaderboard-panel clay-card">
+          <div className="panel-head">
+            <p className="eyebrow">Community</p>
+            <h3>Top Performers</h3>
           </div>
-
-          {loading && <p className="mini-leaderboard-subtitle">Loading...</p>}
-          {error && !loading && <p className="mini-leaderboard-subtitle">{error}</p>}
-
+          {loading && <p className="panel-meta">Loading leaderboard...</p>}
+          {error && !loading && <p className="panel-meta">{error}</p>}
           {!loading && !error && entries.length > 0 && (
-            <div className="mini-leaderboard-bars">
-              {entries.map((row, idx) => {
-                const maxScore = entries[0].total_score || 1;
-                const height =
-                  maxScore > 0 ? Math.max(15, (row.total_score / maxScore) * 100) : 20;
-                return (
-                  <div className="mini-bar" key={row.user_id}>
-                    <div className="mini-bar-score">{row.total_score?.toFixed(0)}</div>
-                    <div
-                      className="mini-bar-rect"
-                      style={{ height: `${height}%` }}
-                      title={`${row.name} – ${row.total_score?.toFixed(1)}`}
-                    ></div>
-                    <div className="mini-bar-name">{row.name.split(' ')[0]}</div>
-                  </div>
-                );
-              })}
+            <div className="leaderboard-list">
+              {entries.map((row, idx) => (
+                <div className="leaderboard-row" key={row.user_id || idx}>
+                  <span className="rank">#{idx + 1}</span>
+                  <span className="name">{row.name}</span>
+                  <span className="score">{Number(row.total_score || 0).toFixed(0)}</span>
+                </div>
+              ))}
             </div>
           )}
-
-          <div className="mini-leaderboard-footer">
-            <span>Updated when you refresh.</span>
-            <span className="mini-leaderboard-chip">Top performers</span>
-          </div>
+          <a href="leaderboard.html" className="text-link">Open full leaderboard</a>
         </div>
       );
     }
 
     function HomePage() {
-      const [loggedIn, setLoggedIn] = useState(isLoggedIn());
+      const [loggedIn] = useState(isLoggedIn());
       const [menuOpen, setMenuOpen] = useState(false);
       const [headerSolid, setHeaderSolid] = useState(false);
       const [feedbackMessage, setFeedbackMessage] = useState('');
       const [feedbackError, setFeedbackError] = useState(false);
       const [feedbackLoading, setFeedbackLoading] = useState(false);
+      const [heroIndex, setHeroIndex] = useState(0);
+      const [showcaseIndex, setShowcaseIndex] = useState(0);
 
       useEffect(() => {
         function onScroll() {
-          setHeaderSolid(window.scrollY > 50);
+          setHeaderSolid(window.scrollY > 30);
         }
         window.addEventListener('scroll', onScroll);
         return () => window.removeEventListener('scroll', onScroll);
       }, []);
+
+      useEffect(() => {
+        const timer = setInterval(() => {
+          setHeroIndex((prev) => (prev + 1) % heroSlides.length);
+        }, 4500);
+        return () => clearInterval(timer);
+      }, []);
+
+      useEffect(() => {
+        const timer = setInterval(() => {
+          setShowcaseIndex((prev) => (prev + 1) % showcaseImages.length);
+        }, 3500);
+        return () => clearInterval(timer);
+      }, []);
+
+      function closeMobileMenu() {
+        setMenuOpen(false);
+        document.body.style.overflow = '';
+      }
 
       async function handleContactSubmit(e) {
         e.preventDefault();
@@ -141,261 +168,216 @@
           });
           const data = await res.json();
           if (data.success) {
-            setFeedbackMessage(data.message || "Thanks for your message! We'll get back to you soon.");
-            setFeedbackError(false);
+            setFeedbackMessage(data.message || "Thanks for your message. We'll reach out shortly.");
             form.reset();
           } else {
-            setFeedbackMessage(data.message || 'Failed to send feedback.');
             setFeedbackError(true);
+            setFeedbackMessage(data.message || 'Failed to send feedback.');
           }
         } catch (err) {
           console.error(err);
-          setFeedbackMessage('Network error. Please try again later.');
           setFeedbackError(true);
+          setFeedbackMessage('Network error. Please try again later.');
+        } finally {
+          setFeedbackLoading(false);
         }
-        setFeedbackLoading(false);
       }
 
       return (
         <>
           <header className={'header' + (headerSolid ? ' header--solid' : '')}>
             <div className="container header-inner">
-              <a href="#" className="logo">
-                BENNETT-UNIVERSITY OFFICIAL
-              </a>
-              <nav className="nav">
-                {loggedIn && (
-                  <>
-                    <a href="profile.html" id="nav-profile">
-                      Profile
-                    </a>
-                    <a href="leaderboard.html" id="nav-leaderboard">
-                      Leaderboard
-                    </a>
-                  </>
-                )}
-                {!loggedIn && (
-                  <>
-                    <a href="login.html" id="nav-login">
-                      Login
-                    </a>
-                    <a href="signup.html" id="nav-signup">
-                      Signup
-                    </a>
-                  </>
-                )}
-                <a href="#about">About</a>
+              <a href="#" className="logo">CampusFit Elite</a>
+
+              <nav className="nav desktop-nav">
+                <a href="#programs">Programs</a>
+                <a href="#gallery">Gallery</a>
+                <a href="#schedule">Schedule</a>
                 <a href="#contact">Contact</a>
-                <button
-                  className="menu-btn"
-                  aria-label="Toggle menu"
-                  aria-expanded={menuOpen}
-                  onClick={() => {
-                    const next = !menuOpen;
-                    setMenuOpen(next);
-                    document.body.style.overflow = next ? 'hidden' : '';
-                  }}
-                >
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </button>
+                {loggedIn ? (
+                  <>
+                    <a href="discover.html">Discover</a>
+                    <a href="profile.html">Profile</a>
+                    <a href="leaderboard.html">Leaderboard</a>
+                  </>
+                ) : (
+                  <>
+                    <a href="login.html">Login</a>
+                    <a href="signup.html" className="pill-link">Join Now</a>
+                  </>
+                )}
               </nav>
+
+              <button
+                className="menu-btn"
+                aria-label="Toggle menu"
+                aria-expanded={menuOpen}
+                onClick={() => {
+                  const next = !menuOpen;
+                  setMenuOpen(next);
+                  document.body.style.overflow = next ? 'hidden' : '';
+                }}
+              >
+                <span></span>
+                <span></span>
+                <span></span>
+              </button>
             </div>
+
             <nav className={'nav-mobile' + (menuOpen ? ' is-open' : '')}>
-              <a
-                href="#work"
-                onClick={() => {
-                  setMenuOpen(false);
-                  document.body.style.overflow = '';
-                }}
-              >
-                Work
-              </a>
-              <a
-                href="#services"
-                onClick={() => {
-                  setMenuOpen(false);
-                  document.body.style.overflow = '';
-                }}
-              >
-                Services
-              </a>
-              <a
-                href="#about"
-                onClick={() => {
-                  setMenuOpen(false);
-                  document.body.style.overflow = '';
-                }}
-              >
-                About
-              </a>
-              <a
-                href="#contact"
-                onClick={() => {
-                  setMenuOpen(false);
-                  document.body.style.overflow = '';
-                }}
-              >
-                Contact
-              </a>
+              <a href="#programs" onClick={closeMobileMenu}>Programs</a>
+              <a href="#gallery" onClick={closeMobileMenu}>Gallery</a>
+              <a href="#schedule" onClick={closeMobileMenu}>Schedule</a>
+              <a href="#contact" onClick={closeMobileMenu}>Contact</a>
+              {loggedIn ? (
+                <>
+                  <a href="discover.html" onClick={closeMobileMenu}>Discover</a>
+                  <a href="profile.html" onClick={closeMobileMenu}>Profile</a>
+                  <a href="leaderboard.html" onClick={closeMobileMenu}>Leaderboard</a>
+                </>
+              ) : (
+                <>
+                  <a href="login.html" onClick={closeMobileMenu}>Login</a>
+                  <a href="signup.html" onClick={closeMobileMenu}>Signup</a>
+                </>
+              )}
             </nav>
           </header>
 
           <main>
             <section className="hero">
-              <div className="hero-bg">
-                <img src="background img.webp" alt="" />
+              <div className="hero-backdrop">
+                {heroSlides.map((slide, index) => (
+                  <img
+                    key={slide}
+                    src={slide}
+                    alt=""
+                    className={'hero-bg' + (index === heroIndex ? ' is-active' : '')}
+                  />
+                ))}
               </div>
-              <div className="container hero-content">
-                <p className="hero-label">Bennett University</p>
-                <h1 className="hero-title">
-                  READY TO CRUSH
-                  <br />
-                  GYMRAT?.
-                </h1>
-                <p className="hero-desc">VENI VEDI VICI</p>
-                <a href="#work" className="btn btn-primary">
-                  View our work
-                </a>
-              </div>
-              <div className="hero-scroll">
-                <span>Scroll</span>
-                <div className="scroll-line"></div>
-              </div>
-            </section>
 
-            <section id="work" className="section work">
-              <div className="container">
-                <h2 className="section-title">Our work</h2>
-                <div className="grid gallery">
-                  <a href="#" className="gallery-item gallery-item--large">
-                    <img src="gym pic.jpg" alt="Project 1" />
-                    <div className="gallery-overlay">
-                      <span className="gallery-cat">Branding</span>
-                      <span className="gallery-name">Our GYM</span>
-                    </div>
-                  </a>
-                  <a href="#" className="gallery-item">
-                    <img src="GYM1.jpg" alt="Project 2" />
-                    <div className="gallery-overlay">
-                      <span className="gallery-cat">Exercise</span>
-                      <span className="gallery-name">Cardio Section</span>
-                    </div>
-                  </a>
-                  <a href="#" className="gallery-item">
-                    <img src="motivation.jpg" alt="Project 3" />
-                    <div className="gallery-overlay">
-                      <span className="gallery-cat">our focus</span>
-                      <span className="gallery-name">Motivation</span>
-                    </div>
-                  </a>
-                  <a href="#" className="gallery-item">
-                    <img src="gym2.jpg" alt="Project 4" />
-                    <div className="gallery-overlay">
-                      <span className="gallery-cat">Campaign</span>
-                      <span className="gallery-name">Muscle building</span>
-                    </div>
-                  </a>
-                  <div className="gallery-item">
-                    <MiniLeaderboard />
+              <div className="container hero-grid">
+                <div className="hero-copy clay-card">
+                  <p className="eyebrow">CampusFit Performance Club</p>
+                  <h1>Train Smarter. Move Stronger. Look Elite.</h1>
+                  <p>
+                    A professionally designed university gym experience with guided programs,
+                    certified coaching, and measurable weekly progress.
+                  </p>
+                  <div className="cta-row">
+                    <a href="signup.html" className="btn btn-primary">Register Yourself & Train Others to Earn</a>
+                    <a href="#schedule" className="btn btn-ghost">View Timings</a>
+                  </div>
+                  <div className="hero-stats">
+                    <div><strong>2.5k+</strong><span>Active members</span></div>
+                    <div><strong>35+</strong><span>Weekly classes</span></div>
+                    <div><strong>4.9/5</strong><span>Average rating</span></div>
                   </div>
                 </div>
+
+                <div className="hero-media-col">
+                  <div className="showcase-card clay-card">
+                    <img src={showcaseImages[showcaseIndex].src} alt={showcaseImages[showcaseIndex].title} />
+                    <div className="showcase-meta">
+                      <h3>{showcaseImages[showcaseIndex].title}</h3>
+                      <p>{showcaseImages[showcaseIndex].subtitle}</p>
+                    </div>
+                  </div>
+                  <MiniLeaderboard />
+                </div>
               </div>
             </section>
 
-            <section id="services" className="section services">
+            <section id="programs" className="section">
               <div className="container">
-                <h2 className="section-title">What we do</h2>
-                <div className="services-grid">
-                  <article className="service-card">
-                    <h3>Provide Timeslots</h3>
-                    <p>
-                      We provide a specific time slot for everyone which reduces the chaos and provide easy
-                      acess to equipments.
-                    </p>
+                <div className="section-head">
+                  <p className="eyebrow">Programs</p>
+                  <h2>Personalized training tracks for every goal</h2>
+                </div>
+                <div className="program-grid">
+                  <article className="program-card clay-card">
+                    <h3>Strength Builder</h3>
+                    <p>Progressive overload plans for muscle and power with coach check-ins.</p>
+                    <span>3-5 sessions per week</span>
                   </article>
-                  <article className="service-card">
-                    <h3>Creating Commutnity</h3>
-                    <p>
-                      Compete with your colleagues and be on the top.A place where u can share your story,
-                      help other or create a poll if u want everyone to notice something.
-                    </p>
+                  <article className="program-card clay-card">
+                    <h3>Fat Loss Accelerator</h3>
+                    <p>Cardio + resistance mix designed for sustainable body recomposition.</p>
+                    <span>Nutrition support included</span>
                   </article>
-                  <article className="service-card">
-                    <h3>Leaderboard</h3>
-                    <p>Compete with your colleagues and be on the top.</p>
+                  <article className="program-card clay-card">
+                    <h3>Athletic Conditioning</h3>
+                    <p>Agility, speed, and mobility modules for sport-focused performance.</p>
+                    <span>Coach-led small groups</span>
                   </article>
                 </div>
               </div>
             </section>
 
-            <section id="about" className="section about">
-              <div className="container about-inner">
-                <div className="about-image">
-                  <img src="community.png" alt="Our team" />
-                </div>
-                <div className="about-content">
-                  <h2 className="section-title">We're Campus Fit</h2>
-                  <p>Building Connections</p>
-                  <p className="about-lead">
-                    An official website focused on visual storytelling for our gym that want to stand out.
-                  </p>
-                  <p>
-                    We combine strategy, competition, and motivation to create work that resonates. From
-                    identity to campaign, we're with you from start to end.
-                  </p>
-                  <a href="#contact" className="btn btn-outline">
-                    Share your feedback
-                  </a>
-                </div>
-              </div>
-            </section>
-
-            <section id="contact" className="section contact">
+            <section id="gallery" className="section section-alt">
               <div className="container">
-                <h2 className="section-title">Let's work together</h2>
-                <p className="contact-lead">
-                  Have a thought in mind? Share with us to help us improve.
-                </p>
-                {feedbackMessage && (
-                  <p
-                    style={{
-                      marginBottom: '1rem',
-                      color: feedbackError ? '#ff4d4f' : '#4caf50',
-                      fontSize: '0.95rem',
-                    }}
-                  >
-                    {feedbackMessage}
-                  </p>
-                )}
-                <form className="contact-form" onSubmit={handleContactSubmit}>
+                <div className="section-head">
+                  <p className="eyebrow">Facility</p>
+                  <h2>Premium spaces built for serious training</h2>
+                </div>
+                <div className="gallery-grid">
+                  {showcaseImages.map((item) => (
+                    <article className="gallery-item clay-card" key={item.title}>
+                      <img src={item.src} alt={item.title} />
+                      <div>
+                        <h3>{item.title}</h3>
+                        <p>{item.subtitle}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section id="schedule" className="section">
+              <div className="container schedule-wrap clay-card">
+                <div>
+                  <p className="eyebrow">Schedule</p>
+                  <h2>Open daily with structured slots</h2>
+                  <p>Book sessions in advance and avoid crowded hours. Our timetable is designed for consistency.</p>
+                </div>
+                <div className="schedule-grid">
+                  <div><h4>Mon - Fri</h4><p>6:00 AM - 10:00 PM</p></div>
+                  <div><h4>Saturday</h4><p>7:00 AM - 9:00 PM</p></div>
+                  <div><h4>Sunday</h4><p>8:00 AM - 8:00 PM</p></div>
+                  <div><h4>Coach Hours</h4><p>5:00 PM - 9:00 PM</p></div>
+                </div>
+              </div>
+            </section>
+
+            <section id="contact" className="section section-alt">
+              <div className="container contact-grid">
+                <div className="contact-info">
+                  <p className="eyebrow">Contact</p>
+                  <h2>Build your next fitness chapter with CampusFit</h2>
+                  <p>Share your goal and we will suggest your best starter plan within 24 hours.</p>
+                </div>
+                <form className="contact-form clay-card" onSubmit={handleContactSubmit}>
+                  {feedbackMessage && (
+                    <p className={'form-feedback' + (feedbackError ? ' is-error' : ' is-success')}>
+                      {feedbackMessage}
+                    </p>
+                  )}
                   <div className="form-row">
                     <label htmlFor="name">Name</label>
-                    <input type="text" id="name" name="name" required placeholder="Your name" />
+                    <input id="name" name="name" type="text" placeholder="Your full name" required />
                   </div>
                   <div className="form-row">
                     <label htmlFor="email">Email</label>
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      required
-                      placeholder="you@company.com"
-                    />
+                    <input id="email" name="email" type="email" placeholder="you@example.com" required />
                   </div>
                   <div className="form-row">
-                    <label htmlFor="message">Message</label>
-                    <textarea
-                      id="message"
-                      name="message"
-                      rows="4"
-                      required
-                      placeholder="Tell us about your thoughts"
-                    ></textarea>
+                    <label htmlFor="message">Goal</label>
+                    <textarea id="message" name="message" rows="4" placeholder="Tell us your fitness goal" required></textarea>
                   </div>
-                  <button type="submit" className="btn btn-primary" disabled={feedbackLoading}>
-                    {feedbackLoading ? 'Sending...' : 'Send message'}
+                  <button className="btn btn-primary" type="submit" disabled={feedbackLoading}>
+                    {feedbackLoading ? 'Sending...' : 'Send Enquiry'}
                   </button>
                 </form>
               </div>
@@ -404,15 +386,13 @@
 
           <footer className="footer">
             <div className="container footer-inner">
-              <a href="#" className="logo">
-                CampusFit
-              </a>
+              <a href="#" className="logo">CampusFit Elite</a>
+              <p>Professional training environment for students and athletes.</p>
               <div className="footer-links">
-                <a href="#">Instagram</a>
-                <a href="#">LinkedIn</a>
-                <a href="#">Behance</a>
+                <a href="#programs">Programs</a>
+                <a href="#gallery">Gallery</a>
+                <a href="#contact">Contact</a>
               </div>
-              <p className="footer-copy">&copy; CampusFit. All rights reserved.</p>
             </div>
           </footer>
         </>

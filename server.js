@@ -50,6 +50,7 @@ db.exec(`
     dumbbell_pr TEXT,
     progress_notes TEXT,
     my_timeslot TEXT,
+    role TEXT DEFAULT 'member',
     leaderboard_position INTEGER DEFAULT 0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -130,6 +131,29 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES gm_users(user_id)
   );
 `);
+
+// Basic migration for existing databases (users.db may already exist).
+// This makes sure `avatar` and `role` columns exist for older DBs.
+const profileCols = db
+  .prepare('PRAGMA table_info(profiles)')
+  .all()
+  .map((c) => c.name);
+if (!profileCols.includes('avatar')) {
+  db.exec('ALTER TABLE profiles ADD COLUMN avatar TEXT;');
+}
+if (!profileCols.includes('role')) {
+  db.exec("ALTER TABLE profiles ADD COLUMN role TEXT DEFAULT 'member';");
+}
+
+const TIMESLOTS = [
+  '6:00–7:00 pm',
+  '7:00–8:00 pm',
+  '8:00–9:00 pm',
+  '9:00–10:00 pm',
+  '10:00–11:00 pm',
+  '5:00–6:00 pm',
+];
+const MAX_MEMBERS_PER_TIMESLOT = 15;
 
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -320,24 +344,272 @@ app.get('/api/profile', authMiddleware, (req, res) => {
 // API: Save profile (requires auth)
 app.post('/api/profile', authMiddleware, (req, res) => {
   try {
-    const { avatar, about, full_name, benchpress_pr, dumbbell_pr, progress_notes, my_timeslot, leaderboard_position } = req.body;
+    const {
+      avatar,
+      about,
+      full_name,
+      benchpress_pr,
+      dumbbell_pr,
+      progress_notes,
+      my_timeslot,
+      leaderboard_position,
+      role,
+    } = req.body;
     const userId = req.userId;
     const pos = leaderboard_position != null ? leaderboard_position : 0;
+    const desiredRole = role ? String(role) : 'member';
+
+    const existingProfile = db.prepare('SELECT my_timeslot FROM profiles WHERE user_id = ?').get(userId);
+    const previousSlot = existingProfile?.my_timeslot || null;
+    const desiredSlot = my_timeslot || null;
+
+    if (desiredSlot && !TIMESLOTS.includes(desiredSlot)) {
+      return res.status(400).json({ success: false, message: 'Invalid timeslot' });
+    }
+
+    // Capacity enforcement for timeslot changes.
+    if (desiredSlot && desiredSlot !== previousSlot) {
+      const slotCount = db
+        .prepare('SELECT COUNT(*) AS c FROM profiles WHERE my_timeslot = ? AND user_id <> ?')
+        .get(desiredSlot, userId).c;
+      if (slotCount >= MAX_MEMBERS_PER_TIMESLOT) {
+        return res.status(409).json({
+          success: false,
+          message: 'That timeslot is full. Please choose another slot.',
+        });
+      }
+    }
 
     const existing = db.prepare('SELECT user_id FROM profiles WHERE user_id = ?').get(userId);
     if (existing) {
       db.prepare(`
-        UPDATE profiles SET avatar=?, about=?, full_name=?, benchpress_pr=?, dumbbell_pr=?, progress_notes=?, my_timeslot=?, leaderboard_position=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?
-      `).run(avatar || null, about || null, full_name || null, benchpress_pr || null, dumbbell_pr || null, progress_notes || null, my_timeslot || null, pos, userId);
+        UPDATE profiles
+        SET avatar=?,
+            about=?,
+            full_name=?,
+            benchpress_pr=?,
+            dumbbell_pr=?,
+            progress_notes=?,
+            my_timeslot=?,
+            role=?,
+            leaderboard_position=?,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE user_id=?
+      `).run(
+        avatar || null,
+        about || null,
+        full_name || null,
+        benchpress_pr || null,
+        dumbbell_pr || null,
+        progress_notes || null,
+        my_timeslot || null,
+        desiredRole,
+        pos,
+        userId
+      );
     } else {
       db.prepare(`
-        INSERT INTO profiles (user_id, avatar, about, full_name, benchpress_pr, dumbbell_pr, progress_notes, my_timeslot, leaderboard_position)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(userId, avatar || null, about || null, full_name || null, benchpress_pr || null, dumbbell_pr || null, progress_notes || null, my_timeslot || null, pos);
+        INSERT INTO profiles
+          (user_id, avatar, about, full_name, benchpress_pr, dumbbell_pr, progress_notes, my_timeslot, role, leaderboard_position)
+        VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        userId,
+        avatar || null,
+        about || null,
+        full_name || null,
+        benchpress_pr || null,
+        dumbbell_pr || null,
+        progress_notes || null,
+        my_timeslot || null,
+        desiredRole,
+        pos
+      );
     }
     res.json({ success: true, message: 'Profile saved' });
   } catch (err) {
     console.error('Save profile error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// API: Timeslot availability (capacity per slot)
+app.get('/api/timeslots', authMiddleware, (req, res) => {
+  try {
+    const counts = db
+      .prepare(`
+        SELECT my_timeslot AS slot, COUNT(*) AS c
+        FROM profiles
+        WHERE my_timeslot IS NOT NULL AND my_timeslot <> ''
+        GROUP BY my_timeslot
+      `)
+      .all();
+
+    const countMap = new Map(counts.map((r) => [r.slot, Number(r.c)]));
+
+    const slots = TIMESLOTS.map((slot) => {
+      const count = countMap.get(slot) || 0;
+      const remaining = Math.max(0, MAX_MEMBERS_PER_TIMESLOT - count);
+      return {
+        slot,
+        capacity: MAX_MEMBERS_PER_TIMESLOT,
+        count,
+        remaining,
+        full: remaining <= 0,
+      };
+    });
+
+    res.json({ success: true, slots });
+  } catch (err) {
+    console.error('Get timeslots error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// API: Search registered members (logged-in only; no passwords / private notes)
+app.get('/api/users/search', authMiddleware, (req, res) => {
+  try {
+    const raw = String(req.query.q || '').trim();
+    if (raw.length < 2) {
+      return res.json({ success: true, users: [] });
+    }
+    const q = raw.toLowerCase();
+    const like = `%${q}%`;
+    const me = req.userId;
+
+    const rows = db
+      .prepare(
+        `
+        SELECT u.id, u.email, p.full_name, p.avatar, p.role
+        FROM users u
+        LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE u.id != ?
+          AND (
+            LOWER(COALESCE(p.full_name, '')) LIKE ?
+            OR LOWER(u.email) LIKE ?
+          )
+        ORDER BY
+          CASE WHEN LOWER(COALESCE(p.full_name, '')) LIKE ? THEN 0 ELSE 1 END,
+          u.id ASC
+        LIMIT 25
+      `
+      )
+      .all(me, like, like, `${q}%`);
+
+    const users = rows.map((r) => {
+      const email = r.email || '';
+      const local = email.includes('@') ? email.split('@')[0] : email;
+      const displayName = (r.full_name && String(r.full_name).trim()) || local || 'Member';
+      return {
+        id: r.id,
+        display_name: displayName,
+        avatar: r.avatar || null,
+        role: r.role || 'member',
+      };
+    });
+
+    res.json({ success: true, users });
+  } catch (err) {
+    console.error('User search error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// API: Public profile for another member (logged-in only; privacy-safe fields)
+app.get('/api/users/:id/public', authMiddleware, (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetId) || targetId < 1) {
+      return res.status(400).json({ success: false, message: 'Invalid user' });
+    }
+
+    const row = db
+      .prepare(
+        `
+        SELECT u.id, p.full_name, p.avatar, p.about, p.role,
+               p.benchpress_pr, p.dumbbell_pr, p.leaderboard_position
+        FROM users u
+        LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE u.id = ?
+      `
+      )
+      .get(targetId);
+
+    if (!row) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isOwn = targetId === req.userId;
+    const emailRow = db.prepare('SELECT email FROM users WHERE id = ?').get(targetId);
+    const email = emailRow?.email || '';
+    const local = email.includes('@') ? email.split('@')[0] : email;
+    const displayName = (row.full_name && String(row.full_name).trim()) || local || 'Member';
+
+    res.json({
+      success: true,
+      profile: {
+        id: row.id,
+        display_name: displayName,
+        avatar: row.avatar || null,
+        about: row.about || '',
+        role: row.role || 'member',
+        benchpress_pr: row.benchpress_pr || '',
+        dumbbell_pr: row.dumbbell_pr || '',
+        leaderboard_position: row.leaderboard_position || 0,
+        is_own: isOwn,
+      },
+    });
+  } catch (err) {
+    console.error('Public profile error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// API: Reserve / switch timeslot (updates capacity immediately)
+app.post('/api/profile/timeslot', authMiddleware, (req, res) => {
+  try {
+    const { my_timeslot } = req.body;
+    const desiredSlot = my_timeslot || null;
+    const userId = req.userId;
+
+    const existingProfile = db.prepare('SELECT my_timeslot FROM profiles WHERE user_id = ?').get(userId);
+    const previousSlot = existingProfile?.my_timeslot || null;
+
+    // If user picks the same slot, consider it a no-op.
+    if (desiredSlot && desiredSlot === previousSlot) {
+      return res.json({ success: true, message: 'Timeslot already selected' });
+    }
+
+    if (desiredSlot && !TIMESLOTS.includes(desiredSlot)) {
+      return res.status(400).json({ success: false, message: 'Invalid timeslot' });
+    }
+
+    if (desiredSlot) {
+      const slotCount = db
+        .prepare('SELECT COUNT(*) AS c FROM profiles WHERE my_timeslot = ? AND user_id <> ?')
+        .get(desiredSlot, userId).c;
+
+      if (slotCount >= MAX_MEMBERS_PER_TIMESLOT) {
+        return res.status(409).json({
+          success: false,
+          message: 'That timeslot is full. Please choose another slot.',
+        });
+      }
+    }
+
+    const existing = db.prepare('SELECT user_id FROM profiles WHERE user_id = ?').get(userId);
+    if (existing) {
+      db.prepare('UPDATE profiles SET my_timeslot=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?').run(
+        desiredSlot,
+        userId
+      );
+    } else {
+      db.prepare('INSERT INTO profiles (user_id, my_timeslot) VALUES (?, ?)').run(userId, desiredSlot);
+    }
+
+    res.json({ success: true, message: 'Timeslot updated' });
+  } catch (err) {
+    console.error('Reserve timeslot error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -439,6 +711,8 @@ app.get('/signup', (req, res) => res.sendFile(path.join(__dirname, 'signup.html'
 app.get('/forgot-password', (req, res) => res.sendFile(path.join(__dirname, 'forgot-password.html')));
 app.get('/reset-password', (req, res) => res.sendFile(path.join(__dirname, 'reset-password.html')));
 app.get('/profile', (req, res) => res.sendFile(path.join(__dirname, 'profile.html')));
+app.get('/discover', (req, res) => res.sendFile(path.join(__dirname, 'discover.html')));
+app.get('/user', (req, res) => res.sendFile(path.join(__dirname, 'user.html')));
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
