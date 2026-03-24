@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <link rel="stylesheet" href="profile.css" />
@@ -51,6 +51,15 @@
       };
     }
 
+    const TIMESLOTS = [
+      '6:00–7:00 pm',
+      '7:00–8:00 pm',
+      '8:00–9:00 pm',
+      '9:00–10:00 pm',
+      '10:00–11:00 pm',
+      '5:00–6:00 pm',
+    ];
+
     function ProfilePage() {
       const [email, setEmail] = useState('');
       const [about, setAbout] = useState('');
@@ -59,13 +68,15 @@
       const [dumbbell, setDumbbell] = useState('');
       const [progressNotes, setProgressNotes] = useState('');
       const [myTimeslot, setMyTimeslot] = useState('');
-      const [allTimeslots, setAllTimeslots] = useState('');
+      const [profileRole, setProfileRole] = useState('member');
       const [leaderboardPosition, setLeaderboardPosition] = useState('');
       const [avatar, setAvatar] = useState('');
       const [pendingAvatar, setPendingAvatar] = useState(null);
       const [status, setStatus] = useState('');
       const [statusType, setStatusType] = useState('');
       const [loading, setLoading] = useState(true);
+      const [timeslotStats, setTimeslotStats] = useState({});
+      const [timeslotBusy, setTimeslotBusy] = useState(false);
 
       // Redirect if not logged in
       useEffect(() => {
@@ -107,8 +118,8 @@
               setAvatar(profile.avatar);
             }
 
-            if (!allTimeslots) {
-              setAllTimeslots('Mon–Fri 6am–10pm (view schedule)');
+            if (profile.role) {
+              setProfileRole(profile.role);
             }
           } catch (err) {
             console.error(err);
@@ -155,6 +166,7 @@
           dumbbell_pr: dumbbell,
           progress_notes: progressNotes,
           my_timeslot: myTimeslot,
+          role: profileRole,
           leaderboard_position: parseInt(leaderboardPosition, 10) || 0,
         };
 
@@ -191,6 +203,81 @@
         }
       }
 
+      async function loadTimeslots() {
+        try {
+          const res = await fetch(getApiUrl('/timeslots'), { headers: authHeaders() });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!data.success) return;
+
+          const map = {};
+          (data.slots || []).forEach((s) => {
+            map[s.slot] = s;
+          });
+          setTimeslotStats(map);
+        } catch (err) {
+          // Ignore polling errors to keep the UI responsive
+          console.error(err);
+        }
+      }
+
+      useEffect(() => {
+        // Load + keep slot availability updated for dynamic "full slot" behavior.
+        loadTimeslots();
+        const timer = setInterval(loadTimeslots, 8000);
+        return () => clearInterval(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+
+      async function reserveTimeslot(slot) {
+        if (!slot || slot === myTimeslot) return;
+        const stats = timeslotStats[slot];
+        const disabled = stats && stats.full;
+        if (disabled) {
+          setStatus('This timeslot is full. Choose another one.');
+          setStatusType('error');
+          return;
+        }
+
+        setTimeslotBusy(true);
+        setStatus('Reserving timeslot...');
+        setStatusType('');
+
+        try {
+          const res = await fetch(getApiUrl('/profile/timeslot'), {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ my_timeslot: slot }),
+          });
+          const data = await res.json().catch(() => ({}));
+
+          if (res.status === 401) {
+            clearAuth();
+            return;
+          }
+
+          if (!res.ok || !data.success) {
+            setStatus(data.message || 'Failed to reserve timeslot');
+            setStatusType('error');
+            // Refresh availability right away if someone filled it before us
+            await loadTimeslots();
+            return;
+          }
+
+          setMyTimeslot(slot);
+          setStatus('Timeslot updated!');
+          setStatusType('success');
+          await loadTimeslots();
+          setTimeout(() => setStatus(''), 1800);
+        } catch (err) {
+          console.error(err);
+          setStatus('Network error while reserving timeslot');
+          setStatusType('error');
+        } finally {
+          setTimeslotBusy(false);
+        }
+      }
+
       const leaderboardDisplay =
         parseInt(leaderboardPosition, 10) > 0 ? '#' + parseInt(leaderboardPosition, 10) : '—';
 
@@ -203,6 +290,7 @@
               </a>
               <nav className="profile-nav">
                 <a href="index.html">Home</a>
+                <a href="discover.html">Discover</a>
                 <a href="leaderboard.html">Leaderboard</a>
                 <span className="profile-email">{email}</span>
                 <a
@@ -270,23 +358,92 @@
                   <section className="profile-timeslots animate-in" style={{ animationDelay: '0.15s' }}>
                     <div className="profile-card">
                       <h3>My timeslot</h3>
-                      <input
-                        type="text"
-                        id="my-timeslot"
-                        placeholder="e.g. Mon 9am, Wed 2pm"
-                        value={myTimeslot}
-                        onChange={(e) => setMyTimeslot(e.target.value)}
-                      />
+                      <p className="card-subtitle">
+                        Choose one 1-hour session (gym closes at 11 pm).
+                      </p>
+                      <div className="timeslot-pills">
+                        {TIMESLOTS.map((slot) => {
+                          const stats = timeslotStats[slot];
+                          const isSelected = myTimeslot === slot;
+                          const isFull = !!stats && stats.full;
+                          const isDisabled = !isSelected && isFull;
+                          const seatText = stats
+                            ? stats.full
+                              ? 'Full'
+                              : `${stats.remaining} left`
+                            : '';
+
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              disabled={timeslotBusy || isDisabled}
+                              className={
+                                'timeslot-pill' +
+                                (isSelected ? ' timeslot-pill--selected' : '') +
+                                (isDisabled ? ' timeslot-pill--disabled' : '')
+                              }
+                              onClick={() => reserveTimeslot(slot)}
+                              title={stats ? `${seatText} (Capacity: ${stats.capacity})` : 'Choose slot'}
+                            >
+                              <span className="timeslot-pill-text">{slot}</span>
+                              {seatText && (
+                                <span
+                                  className={
+                                    'timeslot-pill-seat' +
+                                    (stats && stats.full ? ' timeslot-pill-seat--full' : '')
+                                  }
+                                >
+                                  {seatText}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                     <div className="profile-card">
                       <h3>All available timeslots</h3>
-                      <input
-                        type="text"
-                        id="all-timeslots"
-                        placeholder="View or select available slots"
-                        readOnly
-                        value={allTimeslots}
-                      />
+                      <p className="card-subtitle">
+                        Slots are fixed to keep the gym organised. You can switch anytime by picking a
+                        different slot above.
+                      </p>
+                      <div className="timeslot-pills">
+                        {TIMESLOTS.map((slot) => {
+                          const stats = timeslotStats[slot];
+                          const isSelected = myTimeslot === slot;
+                          const isFull = !!stats && stats.full;
+                          const seatText = stats
+                            ? stats.full
+                              ? 'Full'
+                              : `${stats.remaining} left`
+                            : '';
+
+                          return (
+                            <span
+                              key={slot}
+                              className={
+                                'timeslot-pill' +
+                                (isSelected ? ' timeslot-pill--selected' : '') +
+                                (isFull ? ' timeslot-pill--disabled' : '')
+                              }
+                              title={stats ? `${seatText} (Capacity: ${stats.capacity})` : 'Slot'}
+                            >
+                              <span className="timeslot-pill-text">{slot}</span>
+                              {seatText && (
+                                <span
+                                  className={
+                                    'timeslot-pill-seat' +
+                                    (stats && stats.full ? ' timeslot-pill-seat--full' : '')
+                                  }
+                                >
+                                  {seatText}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   </section>
 
@@ -294,6 +451,32 @@
                     <div className="profile-card profile-card--wide">
                       <h3>Progress &amp; PRs</h3>
                       <p className="card-subtitle">Bench press, dumbbell, and more</p>
+                      <div className="profile-role-block">
+                        <h4 className="role-heading">I’m a...</h4>
+                        <div className="role-toggle">
+                          <button
+                            type="button"
+                            className={
+                              'role-pill' + (profileRole === 'trainer' ? ' role-pill--selected' : '')
+                            }
+                            onClick={() => setProfileRole('trainer')}
+                          >
+                            Trainer
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              'role-pill' + (profileRole !== 'trainer' ? ' role-pill--selected' : '')
+                            }
+                            onClick={() => setProfileRole('member')}
+                          >
+                            Just training
+                          </button>
+                        </div>
+                        <p className="role-help">
+                          Trainers can run sessions. Members can train and improve their PRs.
+                        </p>
+                      </div>
                       <div className="progress-grid">
                         <div className="progress-field">
                           <label htmlFor="benchpress">Bench press (kg)</label>
@@ -335,14 +518,9 @@
                       <p className="leaderboard-value" id="leaderboard-position">
                         {leaderboardDisplay}
                       </p>
-                      <input
-                        type="number"
-                        id="leaderboard-input"
-                        placeholder="Rank"
-                        min="1"
-                        value={leaderboardPosition}
-                        onChange={(e) => setLeaderboardPosition(e.target.value)}
-                      />
+                      <p className="card-subtitle">
+                        Rank is calculated automatically based on your performance and consistency.
+                      </p>
                     </div>
                   </section>
 

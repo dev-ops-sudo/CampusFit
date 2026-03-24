@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile – CampusFit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="profile.css" />
+</head>
+<body class="profile-page user-public-page">
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const API_PORT = '3000';
+
+    function getApiUrl(path) {
+      const port = window.location.port;
+      const isFile = window.location.protocol === 'file:';
+      const needRemote = isFile || !port || port !== API_PORT || !window.location.hostname;
+      const base = needRemote ? 'http://localhost:' + API_PORT : '';
+      return (base + '/api' + path).replace(/([^:]\/)\/+/g, '$1');
+    }
+
+    function getToken() {
+      return localStorage.getItem('auth_token');
+    }
+
+    function clearAuth() {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.location.href = 'login.html';
+    }
+
+    function authHeaders() {
+      const token = getToken();
+      return {
+        'Content-Type': 'application/json',
+        Authorization: token ? 'Bearer ' + token : '',
+      };
+    }
+
+    function getIdFromQuery() {
+      const p = new URLSearchParams(window.location.search);
+      const id = parseInt(p.get('id') || '', 10);
+      return Number.isFinite(id) ? id : null;
+    }
+
+    function UserPublicPage() {
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState('');
+      const [p, setP] = useState(null);
+
+      useEffect(() => {
+        if (!getToken()) {
+          clearAuth();
+          return;
+        }
+        const id = getIdFromQuery();
+        if (!id) {
+          setError('Missing profile link.');
+          setLoading(false);
+          return;
+        }
+
+        async function load() {
+          try {
+            const res = await fetch(getApiUrl('/users/' + id + '/public'), {
+              headers: authHeaders(),
+            });
+            if (res.status === 401) {
+              clearAuth();
+              return;
+            }
+            const data = await res.json();
+            if (!data.success || !data.profile) {
+              setError(data.message || 'Could not load profile');
+              setLoading(false);
+              return;
+            }
+            if (data.profile.is_own) {
+              window.location.replace('profile.html');
+              return;
+            }
+            setP(data.profile);
+          } catch (e) {
+            console.error(e);
+            setError('Network error');
+          } finally {
+            setLoading(false);
+          }
+        }
+        load();
+      }, []);
+
+      const rank =
+        p && p.leaderboard_position > 0 ? '#' + p.leaderboard_position : null;
+
+      return (
+        <>
+          <header className="profile-header discover-header">
+            <div className="profile-header-inner">
+              <a href="discover.html" className="discover-back" aria-label="Back to search">
+                ←
+              </a>
+              <h1 className="discover-title">Profile</h1>
+              <a href="profile.html" className="discover-edit-link">
+                Me
+              </a>
+            </div>
+          </header>
+
+          <main className="profile-main user-public-main">
+            <div className="profile-container user-public-container">
+              {loading && <p className="discover-muted">Loading…</p>}
+              {error && !loading && <p className="discover-error">{error}</p>}
+
+              {!loading && !error && p && (
+                <div className="user-public-card animate-in">
+                  <div className="user-public-top">
+                    <div className={'user-public-avatar' + (p.avatar ? ' has-image' : '')}>
+                      {p.avatar ? (
+                        <img src={p.avatar} alt={p.display_name} />
+                      ) : (
+                        <span className="user-public-placeholder">
+                          {(p.display_name || '?').charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="user-public-headline">
+                      <h2 className="user-public-name">{p.display_name}</h2>
+                      <span
+                        className={
+                          'discover-badge' +
+                          (p.role === 'trainer' ? ' discover-badge--trainer' : '')
+                        }
+                      >
+                        {p.role === 'trainer' ? 'Trainer' : 'Member'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {p.about ? (
+                    <p className="user-public-bio">{p.about}</p>
+                  ) : (
+                    <p className="user-public-bio user-public-bio--empty">No bio yet.</p>
+                  )}
+
+                  <div className="user-public-stats profile-card">
+                    {rank && (
+                      <div className="user-stat">
+                        <span className="user-stat-label">Leaderboard</span>
+                        <span className="user-stat-value">{rank}</span>
+                      </div>
+                    )}
+                    {(p.benchpress_pr || p.dumbbell_pr) && (
+                      <>
+                        {p.benchpress_pr ? (
+                          <div className="user-stat">
+                            <span className="user-stat-label">Bench (kg)</span>
+                            <span className="user-stat-value">{p.benchpress_pr}</span>
+                          </div>
+                        ) : null}
+                        {p.dumbbell_pr ? (
+                          <div className="user-stat">
+                            <span className="user-stat-label">Dumbbell (kg)</span>
+                            <span className="user-stat-value">{p.dumbbell_pr}</span>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                    {!rank && !p.benchpress_pr && !p.dumbbell_pr && (
+                      <p className="discover-muted" style={{ margin: 0 }}>
+                        No public stats yet.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </main>
+        </>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<UserPublicPage />);
+  </script>
+</body>
+</html>
